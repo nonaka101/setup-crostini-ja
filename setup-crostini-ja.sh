@@ -72,7 +72,7 @@ OPTION_GIT_CONFIG_USER_EMAIL="" # 例: "sample@example.com"
 # 0 = インストールしない
 # 1 = インストールする
 # 2 = インストールしてデフォルトエディタに設定
-OPTION_NANO_INSTALLATION=2
+OPTION_NANO_INSTALLATION=0
 
 
 # --- 各種開発環境のインストール ---
@@ -330,8 +330,8 @@ function apt_update_and_upgrade() {
 # --- 日本語フォントと絵文字フォントのインストール ---
 function setup_fonts() {
 	log_message "フォントのインストールとキャッシュ更新を開始します。" "INFO"
-	FONTS_TO_INSTALL="fonts-noto-cjk fonts-ipafont fonts-ipaexfont fonts-noto-color-emoji"
-	if sudo apt install -y "$FONTS_TO_INSTALL" >> "$LOG_FILE" 2>&1; then
+	local FONTS_TO_INSTALL="fonts-noto-cjk fonts-ipafont fonts-ipaexfont fonts-noto-color-emoji"
+	if sudo apt install -y $FONTS_TO_INSTALL >> "$LOG_FILE" 2>&1; then
 		log_message "フォント（$FONTS_TO_INSTALL）のインストール成功" "CMD_SUCCESS"
 		log_message "フォントキャッシュを更新します..." "INFO"
 		if sudo fc-cache -fv >> "$LOG_FILE" 2>&1; then
@@ -363,8 +363,8 @@ function setup_locale() {
 		sudo apt install -y locales-all >> "$LOG_FILE" 2>&1
 	fi
 
-	TARGET_LOCALE="ja_JP.UTF-8"
-	TARGET_TIMEZONE="Asia/Tokyo"
+	local TARGET_LOCALE="ja_JP.UTF-8"
+	local TARGET_TIMEZONE="Asia/Tokyo"
 
 	# /etc/locale.gen の該当行のコメントを解除（存在すれば)
 	log_message "/etc/locale.gen を編集します。" "INFO"
@@ -572,9 +572,9 @@ function setup_nodejs() {
 				log_message "Volta のインストールスクリプト実行成功（ユーザー: $SUDO_USER)。" "CMD_SUCCESS"
 
 				# VoltaのPATHを一時的に設定し、node, npm, yarn をインストール
-				VOLTA_PROFILE_SNIPPET='export VOLTA_HOME="$HOME/.volta"; export PATH="$VOLTA_HOME/bin:$PATH"'
-				INSTALL_SUCCESS=true
-				NODE_INSTALL_LOG_MSG=""
+				local VOLTA_PROFILE_SNIPPET='export VOLTA_HOME="$HOME/.volta"; export PATH="$VOLTA_HOME/bin:$PATH"'
+				local INSTALL_SUCCESS=true
+				local NODE_INSTALL_LOG_MSG=""
 
 				if sudo -u "$SUDO_USER" bash -c ". /home/$SUDO_USER/.bashrc; ${VOLTA_PROFILE_SNIPPET}; volta install node" >> "$LOG_FILE" 2>&1; then
 					NODE_INSTALL_LOG_MSG+="node "
