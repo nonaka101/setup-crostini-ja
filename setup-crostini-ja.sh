@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-#   Setup Crositini for Japanese Environment (Version 0.1.0)
+#   Setup Crositini for Japanese Environment (Version 0.2.0)
 # =============================================================================
 #
 # 概要:
@@ -134,7 +134,8 @@ OPTION_GIMP_INSTALL=0
 
 # --- グローバル変数 ---
 LOG_FILE="$(basename "$0" .sh).log"	# 自身のファイル名.log
-SCRIPT_VERSION="0.1.0"
+SCRIPT_VERSION="0.2.0"
+readonly LOG_FILE SCRIPT_VERSION # 定数としてマーク
 
 
 
@@ -148,6 +149,27 @@ function log_message() {
     level="$2"
   fi
   echo "$(date '+%Y-%m-%d %H:%M:%S') [$level] $1" | tee -a "$LOG_FILE"
+}
+
+
+
+# --- ヘルパー関数：apt パッケージのインストール（ログ出力つき） ---
+# $1: インストールするパッケージ（複数の場合はスペース区切りで指定）
+# $2: ログ出力用の説明（例： "nano" -> 「nano をインストールします（パッケージ名一覧）」）
+function install_apt_packages() {
+  local packages="$1"
+  local name="$packages"
+  if [[ -n "$2" ]]; then
+    name="$2"
+  fi
+  log_message "$name をインストールします（ $packages ）" "INFO"
+  if sudo apt install -y $packages >> "$LOG_FILE" 2>&1; then
+    log_message "$name のインストール成功/確認（ $packages ）" "CMD_SUCCESS"
+    return 0
+  else
+    log_message "$name のインストール失敗（ $packages ）" "CMD_FAIL"
+    return 1
+  fi
 }
 
 
@@ -197,7 +219,7 @@ function check_sudo_and_keep_alive() {
       exit 0
     fi
   fi
-  log_message "sudo権限の有効性を確認し、キャッシュを試みます..."
+  log_message "sudo権限の有効性を確認し、キャッシュを試みます。"
   if sudo -v; then
     log_message "sudo権限を確認しました。"
   else
@@ -217,6 +239,7 @@ function generate_log_header() {
 	echo "Crostini（Chromebook Linux 環境）初期設定スクリプト（バージョン $SCRIPT_VERSION)" > "$LOG_FILE"
 	echo "実行開始日時: $(date '+%Y-%m-%d %H:%M:%S')" >> "$LOG_FILE"
 	echo "実行ユーザー（SUDO_USER): $SUDO_USER（このユーザーのホームディレクトリ等に設定が適用されます)" >> "$LOG_FILE"
+  echo "" >> "$LOG_FILE"
 	echo "-----------------------------------------------------" >> "$LOG_FILE"
 	echo "[ログレベル]について" >> "$LOG_FILE"
 	echo " - [INFO]        : 処理内容などを知らせます" >> "$LOG_FILE"
@@ -228,6 +251,22 @@ function generate_log_header() {
   echo "" >> "$LOG_FILE"
 }
 
+
+
+# ---ログファイルのフッター出力（ヘッダーと違い、こちらはターミナル側にも出力が必要） ---
+function generate_log_footer() {
+  echo "" | tee -a "$LOG_FILE"
+	echo "-----------------------------------------------------" | tee -a "$LOG_FILE"
+	echo "初期設定スクリプトの処理が完了しました。" | tee -a "$LOG_FILE"
+	echo "詳細は $LOG_FILE を確認してください。" | tee -a "$LOG_FILE"
+	echo "" | tee -a "$LOG_FILE"
+	echo "注記: " | tee -a "$LOG_FILE"
+	echo "  1. いくつかの設定（特にロケール、Dockerグループ、VoltaのPATH、Keyringなど）を完全に有効にするには、" | tee -a "$LOG_FILE"
+	echo "     Linux環境の再起動、または再ログインする必要がある場合があります。" | tee -a "$LOG_FILE"
+	echo "  2. 日本語入力に関する設定は、スクリプト内では行っていません。" | tee -a "$LOG_FILE"
+	echo "     必要な場合は、例えば chrome://flags/#crostini-qt-ime-support から有効化する手段があります。" | tee -a "$LOG_FILE"
+	echo "  3. VSCode の日本語化は、アクティビティバー「拡張機能」から Japanese Language Pack for VS Code を選択し、画面の指示に従ってください。" | tee -a "$LOG_FILE"
+}
 
 
 
@@ -327,20 +366,36 @@ function apt_update_and_upgrade() {
 
 
 
+# --- 不要になったパッケージ等を自動削除（autoremove, autoclean） ---
+function apt_cleanup() {
+  log_message "apt autoremove を実行します。" "INFO"
+  if sudo apt autoremove -y >> "$LOG_FILE" 2>&1; then
+    log_message "apt autoremove 成功" "CMD_SUCCESS"
+  else
+    log_message "apt autoremove 失敗" "CMD_FAIL"
+  fi
+  log_message "apt autoclean を実行します。" "INFO"
+  if sudo apt autoclean -y >> "$LOG_FILE" 2>&1; then
+    log_message "apt autoclean 成功" "CMD_SUCCESS"
+  else
+    log_message "apt autoclean 失敗" "CMD_FAIL"
+  fi
+}
+
+
+
+
+
 # --- 日本語フォントと絵文字フォントのインストール ---
 function setup_fonts() {
 	log_message "フォントのインストールとキャッシュ更新を開始します。" "INFO"
-	local FONTS_TO_INSTALL="fonts-noto-cjk fonts-ipafont fonts-ipaexfont fonts-noto-color-emoji"
-	if sudo apt install -y $FONTS_TO_INSTALL >> "$LOG_FILE" 2>&1; then
-		log_message "フォント（$FONTS_TO_INSTALL）のインストール成功" "CMD_SUCCESS"
-		log_message "フォントキャッシュを更新します..." "INFO"
+	if install_apt_packages "fonts-noto-cjk fonts-ipafont fonts-ipaexfont fonts-noto-color-emoji" "フォント"; then
+		log_message "フォントキャッシュを更新します。" "INFO"
 		if sudo fc-cache -fv >> "$LOG_FILE" 2>&1; then
 			log_message "フォントキャッシュの更新成功" "CMD_SUCCESS"
 		else
 			log_message "フォントキャッシュの更新失敗" "CMD_FAIL"
 		fi
-	else
-		log_message "フォント（$FONTS_TO_INSTALL）のインストール失敗" "CMD_FAIL"
 	fi
 	echo "" | tee -a "$LOG_FILE"
 }
@@ -355,12 +410,10 @@ function setup_locale() {
 
 	# locales, locales-all パッケージがなければインストール
 	if ! dpkg -s locales > /dev/null 2>&1; then
-		log_message "locales をインストールします。" "INFO"
-		sudo apt install -y locales >> "$LOG_FILE" 2>&1
+    install_apt_packages "locales" "locales"
 	fi
 	if ! dpkg -s locales-all > /dev/null 2>&1; then
-		log_message "locales-all をインストールします。" "INFO"
-		sudo apt install -y locales-all >> "$LOG_FILE" 2>&1
+    install_apt_packages "locales-all" "locales-all"
 	fi
 
 	local TARGET_LOCALE="ja_JP.UTF-8"
@@ -406,36 +459,33 @@ function setup_locale() {
 
 # --- Visual Studio Code（VSCode）のインストール ---
 function setup_vscode() {
-	log_message "VSCodeのインストールを開始します。" "INFO"
+	log_message "VSCode のインストールを開始します。" "INFO"
+
   # HTTPS経由でリポジトリにアクセスするためのソフト等をインストール
-	if sudo apt install -y apt-transport-https curl gpg >> "$LOG_FILE" 2>&1; then
-		log_message "VSCodeインストールに必要なパッケージ（apt-transport-https, curl, gpg）を確認/インストールしました。" "CMD_SUCCESS"
+  if install_apt_packages "apt-transport-https curl gpg" "VSCode インストールに必要なパッケージ"; then
     # マイクロソフト公開鍵の取得
 		curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/packages.microsoft.gpg >> "$LOG_FILE" 2>&1
 		if [[ $? -eq 0 ]]; then
-			log_message "Microsoft GPGキーをインストールしました。" "CMD_SUCCESS"
-      # apt に VSCode リポジトリを追加
+			log_message "Microsoft GPG キーをインストールしました。" "CMD_SUCCESS"
+
+      # apt に Microsoft リポジトリを追加
 			echo "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/vscode stable main" | sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
 			if [[ $? -eq 0 ]]; then
-				log_message "VSCodeリポジトリをaptに追加しました。" "CMD_SUCCESS"
+				log_message "Microsoft リポジトリを apt に追加しました。" "CMD_SUCCESS"
+
+        # 追加分を反映し、VSCode をインストールする
 				if sudo apt update >> "$LOG_FILE" 2>&1; then
-					log_message "apt update（VSCodeリポジトリ追加後）成功" "CMD_SUCCESS"
-					if sudo apt install -y code >> "$LOG_FILE" 2>&1; then
-						log_message "VSCodeのインストール成功" "CMD_SUCCESS"
-					else
-						log_message "VSCodeのインストール失敗" "CMD_FAIL"
-					fi
+					log_message "apt update（Microsoft リポジトリ追加後）成功" "CMD_SUCCESS"
+          install_apt_packages "code" "VSCode"
 				else
-					log_message "apt update（VSCodeリポジトリ追加後）失敗" "CMD_FAIL"
+					log_message "apt update（Microsoft リポジトリ追加後）失敗" "CMD_FAIL"
 				fi
 			else
-				log_message "VSCodeリポジトリのaptへの追加失敗" "CMD_FAIL"
+				log_message "Microsoft リポジトリのaptへの追加失敗" "CMD_FAIL"
 			fi
 		else
-			log_message "Microsoft GPGキーのインストール失敗" "CMD_FAIL"
+			log_message "Microsoft GPG キーのインストール失敗" "CMD_FAIL"
 		fi
-	else
-		log_message "VSCodeインストールに必要なパッケージのインストール失敗" "CMD_FAIL"
 	fi
 	echo "" | tee -a "$LOG_FILE"
 }
@@ -474,9 +524,7 @@ function install_vscode_japanese_language() {
 function setup_nano() {
 	if [[ "$OPTION_NANO_INSTALLATION" -ne 0 ]]; then
 		log_message "nano の処理を開始します。" "INFO"
-		if sudo apt install -y nano >> "$LOG_FILE" 2>&1; then
-			log_message "nano のインストール成功" "CMD_SUCCESS"
-
+    if install_apt_packages "nano" "nano"; then
       # オプション設定により、デフォルトエディタにする
 			if [[ "$OPTION_NANO_INSTALLATION" -eq 2 ]]; then
 				NANO_PATH=$(which nano)
@@ -490,13 +538,11 @@ function setup_nano() {
 					log_message "nanoのパスが見つからず、デフォルトエディタに設定できませんでした。" "CMD_FAIL"
 				fi
 			fi
-
-		else
-			log_message "nano のインストール失敗" "CMD_FAIL"
 		fi
 		echo "" | tee -a "$LOG_FILE"
 	else
-		log_message "nano のインストールはスキップされました。" "INFO"
+		log_message "nano のインストールはスキップされました（ nano ）" "INFO"
+		echo "" | tee -a "$LOG_FILE"
 	fi
 }
 
@@ -508,15 +554,21 @@ function setup_nano() {
 function setup_git_config() {
 	if [[ -n "$OPTION_GIT_CONFIG_USER_NAME" ]] && [[ -n "$OPTION_GIT_CONFIG_USER_EMAIL" ]]; then
 		log_message "git のグローバル設定（user.name, user.email）を開始します。" "INFO"
+
+    # git のインストール確認（ git が導入できてない場合、後続にある処理はスキップ）
+    local SKIP_GIT_CONFIG=false
 		if ! command -v git &> /dev/null; then
-			log_message "git コマンドが見つかりません。gitのインストールを試みます。" "WARN"
-			sudo apt install -y git >> "$LOG_FILE" 2>&1
+      # git が存在しないためインストールを試みる
+			log_message "git コマンドが見つかりませんでした。" "WARN"
+      install_apt_packages "git" "git"
 			if ! command -v git &> /dev/null; then
-				log_message "git のインストールに失敗しました。設定をスキップします。" "CMD_FAIL"
-				skip_git_config=true # gitのインストールに失敗した場合は、後続にある処理はスキップ
+				log_message "git のインストールに失敗したため、設定をスキップします。" "CMD_FAIL"
+				SKIP_GIT_CONFIG=true
 			fi
 		fi
-		if [[ "$skip_git_config" != true ]]; then
+
+    # `git config` で name, email を設定
+		if [[ "$SKIP_GIT_CONFIG" != true ]]; then
 			if [[ -n "$SUDO_USER" ]] && [[ "$SUDO_USER" != "root" ]]; then
 				if sudo -u "$SUDO_USER" git config --global user.name "$OPTION_GIT_CONFIG_USER_NAME" && \
 					sudo -u "$SUDO_USER" git config --global user.email "$OPTION_GIT_CONFIG_USER_EMAIL"; then
@@ -532,6 +584,7 @@ function setup_git_config() {
 		echo "" | tee -a "$LOG_FILE"
 	else
 		log_message "git のグローバル設定はスキップされました（ユーザー名またはメールアドレスが未設定)。" "INFO"
+		echo "" | tee -a "$LOG_FILE"
 	fi
 }
 
@@ -542,15 +595,11 @@ function setup_git_config() {
 # --- マニュアル（manpages-ja, manpages-ja-dev）のインストール ---
 function setup_manpages() {
 	if [[ "$OPTION_MANPAGES_INSTALL" -eq 1 ]]; then
-		log_message "マニュアル（manpages-ja, manpages-ja-dev）のインストールを開始します。" "INFO"
-		if sudo apt install manpages-ja manpages-ja-dev >> "$LOG_FILE" 2>&1; then
-			log_message "マニュアル（manpages-ja, manpages-ja-dev）のインストール/確認成功" "CMD_SUCCESS"
-		else
-			log_message "マニュアル（manpages-ja, manpages-ja-dev）のインストール失敗" "CMD_FAIL"
-		fi
+    install_apt_packages "manpages-ja manpages-ja-dev" "マニュアル"
 		echo "" | tee -a "$LOG_FILE"
 	else
-		log_message "マニュアル（manpages-ja, manpages-ja-dev）のインストールはスキップされました。" "INFO"
+		log_message "マニュアルのインストールはスキップされました（manpages-ja, manpages-ja-dev）" "INFO"
+		echo "" | tee -a "$LOG_FILE"
 	fi
 }
 
@@ -610,6 +659,7 @@ function setup_nodejs() {
 		echo "" | tee -a "$LOG_FILE"
 	else
 		log_message "Node.js（volta経由）のインストールはスキップされました。" "INFO"
+		echo "" | tee -a "$LOG_FILE"
 	fi
 }
 
@@ -620,9 +670,7 @@ function setup_nodejs() {
 # --- Keyring のインストール + VSCode 連携 ---
 function setup_keyring() {
 	if [[ "$OPTION_KEYRING_INSTALL" -eq 1 ]]; then
-		log_message "Keyring（gnome-keyring）の導入を開始します。" "INFO"
-		if sudo apt install -y gnome-keyring libsecret-tools jq >> "$LOG_FILE" 2>&1; then
-			log_message "gnome-keyring, libsecret-tools, jq のインストール成功" "CMD_SUCCESS"
+    if install_apt_packages "gnome-keyring libsecret-tools jq" "キーリング"; then
 			if [[ -n "$SUDO_USER" ]] && [[ "$SUDO_USER" != "root" ]]; then
 
 				# 必要なディレクトリやファイル（argv.json）があるかを確認し、なければ作成
@@ -661,7 +709,7 @@ function setup_keyring() {
 					# jqコマンドが成功した場合、一時ファイルの内容で元のファイルを上書き
 					if install -m 644 "$TMP_FILE_ARGV" "$VSCODE_ARGV_JSON_PATH"; then
 						log_message "VSCode（$VSCODE_ARGV_JSON_PATH）に '$KEY_NAME: $VALUE_NAME' を設定しました。" "CMD_SUCCESS"
-						log_message "gnome-keyring を利用するには、Linux環境の再起動や、初回利用時にパスワード設定が必要な場合があります。" "WARN"
+						log_message "キーリングの利用には、Linux環境の再起動や、初回利用時にパスワード設定が必要な場合があります。" "WARN"
 					else
 						# install コマンドが失敗した場合
 						log_message "install コマンドの実行に失敗しました。" "CMD_FAIL"
@@ -672,11 +720,12 @@ function setup_keyring() {
 				log_message "SUDO_USERが不明なため、VSCodeのKeyring連携設定をスキップしました。" "WARN"
 			fi
 		else
-			log_message "gnome-keyring, libsecret-tools, jq のインストール失敗。VSCode連携設定は行われません。" "CMD_FAIL"
+			log_message "キーリングのインストールに失敗したため、VSCode連携設定は行われません。" "WARN"
 		fi
 		echo "" | tee -a "$LOG_FILE"
 	else
-		log_message "Keyring（gnome-keyring）の導入はスキップされました。" "INFO"
+		log_message "キーリングの導入及び VSCode への連携はスキップされました" "INFO"
+		echo "" | tee -a "$LOG_FILE"
 	fi
 }
 
@@ -687,20 +736,16 @@ function setup_keyring() {
 # --- C/C++開発環境のインストール ---
 function setup_cpp() {
 	if [[ "$OPTION_CPP_DEV_INSTALL" -ne 0 ]]; then
-		log_message "C/C++開発環境のインストールを開始します。" "INFO"
-		if sudo apt install -y build-essential gdb >> "$LOG_FILE" 2>&1; then
-			log_message "C/C++開発環境（build-essential, gdb）のインストール成功" "CMD_SUCCESS"
-
+    if install_apt_packages "build-essential gdb" "C/C++開発環境"; then
 			# VSCode 拡張機能のインストール
 			if [[ "$OPTION_CPP_DEV_INSTALL" -eq 2 ]]; then
 				install_vscode_extension "ms-vscode.cpptools-extension-pack" "C/C++ Extension Pack"
 			fi
-		else
-			log_message "C/C++開発環境のインストール失敗" "CMD_FAIL"
 		fi
 		echo "" | tee -a "$LOG_FILE"
 	else
-			log_message "C/C++開発環境のインストールはスキップされました。" "INFO"
+    log_message "C/C++開発環境のインストールはスキップされました。" "INFO"
+		echo "" | tee -a "$LOG_FILE"
 	fi
 }
 
@@ -711,10 +756,7 @@ function setup_cpp() {
 # --- Java（OpenJDK）のインストール ---
 function setup_java() {
 	if [[ "$OPTION_JAVA_INSTALL" -ne 0 ]]; then
-		log_message "Java（OpenJDK）のインストールを開始します。" "INFO"
-		if sudo apt install -y default-jdk jq >> "$LOG_FILE" 2>&1; then
-			log_message "Java（default-jdk）のインストール成功" "CMD_SUCCESS"
-
+    if install_apt_packages "default-jdk jq" "Java（OpenJDK）"; then
 			# VSCode 拡張機能のインストール
 			if [[ "$OPTION_JAVA_INSTALL" -eq 2 ]]; then
 				install_vscode_extension "vscjava.vscode-java-pack" "Extension Pack for Java"
@@ -804,12 +846,11 @@ function setup_java() {
 			else
 				log_message "SUDO_USER が不明なため、VSCode の Java 設定をスキップしました。" "WARN"
 			fi
-		else
-			log_message "Java（default-jdk）のインストール失敗" "CMD_FAIL"
 		fi
 		echo "" | tee -a "$LOG_FILE"
 	else
-		log_message "Java（OpenJDK）のインストールはスキップされました。" "INFO"
+		log_message "Java（OpenJDK）のインストールはスキップされました（ default-jdk jq ）" "INFO"
+		echo "" | tee -a "$LOG_FILE"
 	fi
 }
 
@@ -821,8 +862,10 @@ function setup_java() {
 function setup_docker() {
 	if [[ "$OPTION_DOCKER_INSTALL" -ne 0 ]]; then
 		log_message "Docker のインストールを開始します。" "INFO"
+
+    # curl の存在を確認し、curl 経由で docker をインストール
 		if ! command -v curl &> /dev/null; then
-			sudo apt install -y curl >> "$LOG_FILE" 2>&1
+      install_apt_packages "curl" "curl"
 		fi
 		if curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh >> "$LOG_FILE" 2>&1; then
 			log_message "Docker のインストールスクリプト実行成功" "CMD_SUCCESS"
@@ -836,7 +879,7 @@ function setup_docker() {
 			if [[ -n "$SUDO_USER" ]] && [[ "$SUDO_USER" != "root" ]]; then
 				if sudo usermod -aG docker "$SUDO_USER" >> "$LOG_FILE" 2>&1; then
 					log_message "ユーザー '$SUDO_USER' を 'docker' グループに追加しました。" "CMD_SUCCESS"
-					log_message "この変更を有効にするには、一度Linux環境からログアウトし、再度ログインしてください。" "WARN"
+					log_message "この変更を有効にするには、Linux環境の再起動が必要な場合があります。" "WARN"
 				else
 					log_message "ユーザー '$SUDO_USER' を 'docker' グループに追加できませんでした。" "CMD_FAIL"
 				fi
@@ -850,7 +893,8 @@ function setup_docker() {
 		fi
 		echo "" | tee -a "$LOG_FILE"
 	else
-			log_message "Docker のインストールはスキップされました。" "INFO"
+		log_message "Docker のインストールはスキップされました。" "INFO"
+		echo "" | tee -a "$LOG_FILE"
 	fi
 }
 
@@ -861,21 +905,16 @@ function setup_docker() {
 # --- Python（python3, python3-pip, python3-venv）のインストール ---
 function setup_python() {
 	if [[ "$OPTION_PYTHON_INSTALL" -ne 0 ]]; then
-		log_message "Python（python3, python3-pip, python3-venv）のインストールを開始します。" "INFO"
-		if sudo apt install -y python3 python3-pip python3-venv >> "$LOG_FILE" 2>&1; then
-			log_message "Python（python3, python3-pip, python3-venv）のインストール/確認成功" "CMD_SUCCESS"
-
+    if install_apt_packages "python3 python3-pip python3-venv" "Python"; then
 			# VSCode 拡張機能のインストール
 			if [[ "$OPTION_PYTHON_INSTALL" -eq 2 ]]; then
 				install_vscode_extension "ms-python.python" "Python"
 			fi
-
-		else
-			log_message "Python（python3, python3-pip, python3-venv）のインストール失敗" "CMD_FAIL"
 		fi
 		echo "" | tee -a "$LOG_FILE"
 	else
-		log_message "Python のインストールはスキップされました。" "INFO"
+		log_message "Python のインストールはスキップされました（ python3, python3-pip, python3-venv ）" "INFO"
+		echo "" | tee -a "$LOG_FILE"
 	fi
 }
 
@@ -886,15 +925,11 @@ function setup_python() {
 # --- Chromium（Crostini側でのブラウザ）のインストール ---
 function setup_chromium() {
 	if [[ "$OPTION_CHROMIUM_INSTALL" -eq 1 ]]; then
-			log_message "Chromium ブラウザのインストールを開始します。" "INFO"
-			if sudo apt install -y chromium >> "$LOG_FILE" 2>&1; then
-					log_message "Chromium ブラウザのインストール成功" "CMD_SUCCESS"
-			else
-					log_message "Chromium ブラウザのインストール失敗" "CMD_FAIL"
-			fi
-			echo "" | tee -a "$LOG_FILE"
+    install_apt_packages "chromium" "Chromium ブラウザ"
+    echo "" | tee -a "$LOG_FILE"
 	else
-			log_message "Chromium ブラウザのインストールはスキップされました。" "INFO"
+    log_message "Chromium ブラウザのインストールはスキップされました（ chromium ）" "INFO"
+		echo "" | tee -a "$LOG_FILE"
 	fi
 }
 
@@ -905,15 +940,11 @@ function setup_chromium() {
 # --- Inkscape のインストール ---
 function setup_inkscape() {
 	if [[ "$OPTION_INKSCAPE_INSTALL" -eq 1 ]]; then
-			log_message "InkScape のインストールを開始します。" "INFO"
-			if sudo apt install -y inkscape >> "$LOG_FILE" 2>&1; then
-					log_message "InkScape のインストール成功" "CMD_SUCCESS"
-			else
-					log_message "InkScape のインストール失敗" "CMD_FAIL"
-			fi
-			echo "" | tee -a "$LOG_FILE"
+    install_apt_packages "inkscape" "InkScape"
+    echo "" | tee -a "$LOG_FILE"
 	else
-			log_message "InkScape のインストールはスキップされました。" "INFO"
+    log_message "InkScape のインストールはスキップされました（ inkscape ）" "INFO"
+		echo "" | tee -a "$LOG_FILE"
 	fi
 }
 
@@ -924,15 +955,11 @@ function setup_inkscape() {
 # --- Gimp のインストール ---
 function setup_gimp() {
 	if [[ "$OPTION_GIMP_INSTALL" -eq 1 ]]; then
-			log_message "GIMP のインストールを開始します。" "INFO"
-			if sudo apt install -y gimp >> "$LOG_FILE" 2>&1; then
-					log_message "GIMP のインストール成功" "CMD_SUCCESS"
-			else
-					log_message "GIMP のインストール失敗" "CMD_FAIL"
-			fi
-			echo "" | tee -a "$LOG_FILE"
+    install_apt_packages "gimp" "GIMP"
+    echo "" | tee -a "$LOG_FILE"
 	else
-			log_message "GIMP のインストールはスキップされました。" "INFO"
+    log_message "GIMP のインストールはスキップされました（ gimp ）" "INFO"
+		echo "" | tee -a "$LOG_FILE"
 	fi
 }
 
@@ -942,22 +969,27 @@ function setup_gimp() {
 
 # --- メイン処理 ---
 main() {
-  # 初期部分
+  # 初期部分（ヘッダー、初期確認画面）
   generate_log_header
 	initialize_confirmation
 
 	# 必須処理
+	echo "" | tee -a "$LOG_FILE"
 	log_message "--- 必須処理開始 ---" "INFO"
+	echo "" | tee -a "$LOG_FILE"
 	apt_update_and_upgrade
 	setup_fonts
 	setup_locale
 	setup_vscode
 	install_vscode_japanese_language
+	echo "" | tee -a "$LOG_FILE"
 	log_message "--- 必須処理完了 ---" "INFO"
 	echo "" | tee -a "$LOG_FILE"
 
 	# オプション処理
+	echo "" | tee -a "$LOG_FILE"
 	log_message "--- オプション処理開始 ---" "INFO"
+	echo "" | tee -a "$LOG_FILE"
 	setup_nano
 	setup_git_config
 	setup_manpages
@@ -970,25 +1002,23 @@ main() {
 	setup_chromium
 	setup_inkscape
 	setup_gimp
-
-  # 完了、フッターとなる部分をターミナルとログに出力
-  echo "" | tee -a "$LOG_FILE"
+	echo "" | tee -a "$LOG_FILE"
 	log_message "--- オプション処理完了 ---" "INFO"
+  echo "" | tee -a "$LOG_FILE"
+
+  # クリーンアップ
 	echo "" | tee -a "$LOG_FILE"
+	log_message "--- クリーンアップ ---" "INFO"
+	echo "" | tee -a "$LOG_FILE"
+  apt_cleanup
+	echo "" | tee -a "$LOG_FILE"
+	log_message "--- クリーンアップ 完了 ---" "INFO"
+  echo "" | tee -a "$LOG_FILE"
+
+  # 完了（フッター）
 	log_message "全ての処理が完了しました。" "INFO"
-	echo "-----------------------------------------------------" | tee -a "$LOG_FILE"
-	echo "初期設定スクリプトの処理が完了しました。" | tee -a "$LOG_FILE"
-	echo "詳細は $LOG_FILE を確認してください。" | tee -a "$LOG_FILE"
-	echo "" | tee -a "$LOG_FILE"
-	echo "注記: " | tee -a "$LOG_FILE"
-	echo "  1. いくつかの設定（特にロケール、Dockerグループ、VoltaのPATH、Keyringなど）を完全に有効にするには、" | tee -a "$LOG_FILE"
-	echo "     Linux環境の再起動、または一度ログアウトしてターミナルに再ログインする必要がある場合があります。" | tee -a "$LOG_FILE"
-	echo "  2. 日本語入力に関する設定は、スクリプト内では行っていません。" | tee -a "$LOG_FILE"
-	echo "     必要な場合は、例えば chrome://flags/#crostini-qt-ime-support から有効化する手段があります。" | tee -a "$LOG_FILE"
-	echo "  3. VSCode の日本語化は、アクティビティバー「拡張機能」から Japanese Language Pack for VS Code を選択し、画面の指示に従ってください。" | tee -a "$LOG_FILE"
+  generate_log_footer
 }
-
-
 
 
 
