@@ -1,5 +1,7 @@
 # Setup Crositini for Japanese Environment
 
+![リポジトリのロゴ](/image/logo.png)
+
 ## 概要
 
 Crostini（Chromebook に搭載されている Linux 環境）の初期設定を行うためのスクリプトです。
