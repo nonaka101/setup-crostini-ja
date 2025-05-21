@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-#   Setup Crositini for Japanese Environment (Version 0.2.0)
+#   Setup Crositini for Japanese Environment (Version 0.2.1)
 # =============================================================================
 #
 # 概要:
@@ -18,9 +18,9 @@
 # 注意:
 #   - スクリプト実行には、sudo が必要です。元のユーザー権限で実行したいコマンドがあるため、$SUDO_USER 変数を利用します。
 #   - スクリプトは、Crostini 環境を想定しています。
-#   - 日本語入力の設定はスクリプトでは行っていません（※1）
+#   - 日本語入力の設定はスクリプトでは行っていません、これは環境構築段階で `cros-im` がインストール済みのためです（※1）
 #   - Chromium, InkScape, GIMP は使用する容量が大きいので、インストールする場合は十分なストレージを確保してください（※2）
-#     ※1: 必要な場合は、例えば `chrome://flags/#crostini-qt-ime-support` を有効化する方法があります
+#     ※1: Qt アプリケーションでの日本語入力を使う場合は、`chrome://flags/#crostini-qt-ime-support` を有効化する方法があります
 #     ※2: 構築時のデフォルト設定（10GB）か、それ以上を推奨します
 #
 # 処理について:
@@ -134,7 +134,7 @@ OPTION_GIMP_INSTALL=0
 
 # --- グローバル変数 ---
 LOG_FILE="$(basename "$0" .sh).log"	# 自身のファイル名.log
-SCRIPT_VERSION="0.2.0"
+SCRIPT_VERSION="0.2.1"
 readonly LOG_FILE SCRIPT_VERSION # 定数としてマーク
 
 
@@ -237,18 +237,20 @@ function check_sudo_and_keep_alive() {
 function generate_log_header() {
 	# `>` により、ログファイルの初期化
 	echo "Crostini（Chromebook Linux 環境）初期設定スクリプト（バージョン $SCRIPT_VERSION)" > "$LOG_FILE"
-	echo "実行開始日時: $(date '+%Y-%m-%d %H:%M:%S')" >> "$LOG_FILE"
-	echo "実行ユーザー（SUDO_USER): $SUDO_USER（このユーザーのホームディレクトリ等に設定が適用されます)" >> "$LOG_FILE"
-  echo "" >> "$LOG_FILE"
-	echo "-----------------------------------------------------" >> "$LOG_FILE"
-	echo "[ログレベル]について" >> "$LOG_FILE"
-	echo " - [INFO]        : 処理内容などを知らせます" >> "$LOG_FILE"
-	echo " - [WARN]        : 注意を促すメッセージです" >> "$LOG_FILE"
-	echo " - [ERROR]       : 想定外となるエラー状況を知らせます" >> "$LOG_FILE"
-	echo " - [CMD_SUCCESS] : 処理に成功したことを示します" >> "$LOG_FILE"
-	echo " - [CMD_FAIL]    : 処理に失敗したことを示します" >> "$LOG_FILE"
-	echo "-----------------------------------------------------" >> "$LOG_FILE"
-  echo "" >> "$LOG_FILE"
+  {
+    echo "実行開始日時: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "実行ユーザー（SUDO_USER): $SUDO_USER（このユーザーのホームディレクトリ等に設定が適用されます)"
+    echo ""
+    echo "-----------------------------------------------------"
+    echo "[ログレベル]について"
+    echo " - [INFO]        : 処理内容などを知らせます"
+    echo " - [WARN]        : 注意を促すメッセージです"
+    echo " - [ERROR]       : 想定外となるエラー状況を知らせます"
+    echo " - [CMD_SUCCESS] : 処理に成功したことを示します"
+    echo " - [CMD_FAIL]    : 処理に失敗したことを示します"
+    echo "-----------------------------------------------------"
+    echo ""
+  } >> "$LOG_FILE"
 }
 
 
@@ -263,8 +265,8 @@ function generate_log_footer() {
 	echo "注記: " | tee -a "$LOG_FILE"
 	echo "  1. いくつかの設定（特にロケール、Dockerグループ、VoltaのPATH、Keyringなど）を完全に有効にするには、" | tee -a "$LOG_FILE"
 	echo "     Linux環境の再起動、または再ログインする必要がある場合があります。" | tee -a "$LOG_FILE"
-	echo "  2. 日本語入力に関する設定は、スクリプト内では行っていません。" | tee -a "$LOG_FILE"
-	echo "     必要な場合は、例えば chrome://flags/#crostini-qt-ime-support から有効化する手段があります。" | tee -a "$LOG_FILE"
+	echo "  2. 日本語入力に関する設定は、cros-im がインストール済みのため、スクリプト内で処理は行っていません。" | tee -a "$LOG_FILE"
+	echo "     Qt アプリケーションで利用する場合は、chrome://flags/#crostini-qt-ime-support で有効化する手段があります。" | tee -a "$LOG_FILE"
 	echo "  3. VSCode の日本語化は、アクティビティバー「拡張機能」から Japanese Language Pack for VS Code を選択し、画面の指示に従ってください。" | tee -a "$LOG_FILE"
 }
 
@@ -289,7 +291,8 @@ function initialize_confirmation() {
 	echo "  - Visual Studio Code（VSCode）のインストール"
 	echo "  - VSCode 日本語拡張機能のインストール"
 	echo ""
-	echo -e " ※ 日本語入力環境は、\e[93mchrome://flags/#crostini-qt-ime-support\e[0m を有効化することで利用可能になります。"
+	echo " ※ 日本語入力環境は、cros-im がインストール済みなので処理は不要です。"
+	echo "    Qt アプリケーションで利用する場合、chrome://flags/#crostini-qt-ime-support を有効化する方法があります。"
 	echo ""
 	echo "[オプション処理]"
 	case $OPTION_NANO_INSTALLATION in
