@@ -1,4 +1,4 @@
-# Setup Crositini for Japanese Environment
+# Setup Crostini for Japanese Environment
 
 ![リポジトリのロゴ](/image/logo.png)
 
